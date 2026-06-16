@@ -5,6 +5,8 @@ const supabaseConfig = window.SPM_SUPABASE_CONFIG || {
   anonKey: ""
 };
 
+const LOCAL_ADMIN_PASSWORD = "admin123";
+
 let supabaseRuntime = null;
 
 const monthNames = [
@@ -572,7 +574,7 @@ function allMeetings(monthKey = state.selectedMonth) {
 }
 
 function printMonthKeys() {
-  return [state.selectedMonth, nextMonthKey(state.selectedMonth)];
+  return [state.selectedMonth];
 }
 
 function pick(meeting, role) {
@@ -585,6 +587,7 @@ function render() {
   renderWeeklyCards();
   renderAlerts();
   renderMonthPicker();
+  renderPrintMonthSelect();
   renderMonthWeeks();
   renderScheduleTable();
   renderPrintPage();
@@ -696,6 +699,20 @@ function renderMonthPicker() {
   });
 }
 
+function availableMonthKeys() {
+  const keys = new Set(["2026-06", "2026-07", "2026-08", "2026-09"]);
+  Object.keys(state.months || {}).forEach((key) => keys.add(key));
+  return [...keys].sort();
+}
+
+function renderPrintMonthSelect() {
+  const select = document.querySelector("#printMonthSelect");
+  if (!select) return;
+  select.innerHTML = availableMonthKeys().map((monthKey) => (
+    `<option value="${monthKey}" ${monthKey === state.selectedMonth ? "selected" : ""}>${monthLabel(monthKey)}</option>`
+  )).join("");
+}
+
 function renderMonthWeeks() {
   const root = document.querySelector("#monthWeeks");
   if (!root) return;
@@ -764,24 +781,16 @@ function renderScheduleTable() {
 function renderPrintPage() {
   const root = document.querySelector("#printSheet");
   if (!root) return;
-  const keys = printMonthKeys();
-  keys.forEach((monthKey) => {
-    if (!state.months[monthKey]) generateMonth(monthKey, false);
-  });
-  const months = keys.map((monthKey) => monthByKey(monthKey)).filter(Boolean);
-  if (!months.length) {
+  const monthKey = state.selectedMonth;
+  if (!state.months[monthKey]) generateMonth(monthKey, false);
+  const month = monthByKey(monthKey);
+  if (!month) {
     root.innerHTML = `<p class="hint">Gere o mes selecionado para montar a programacao.</p>`;
     return;
   }
-  const meetings = keys.flatMap((monthKey, monthIndex) => (
-    allMeetings(monthKey).map((meeting, meetingIndex) => ({
-      ...meeting,
-      monthKey,
-      isMonthBreak: monthIndex > 0 && meetingIndex === 0
-    }))
-  ));
-  const printLabel = keys.map((monthKey) => monthNames[Number(monthKey.split("-")[1]) - 1]).join(" e ");
-  const printYear = keys[0].split("-")[0];
+  const meetings = allMeetings(monthKey).map((meeting) => ({ ...meeting, monthKey, isMonthBreak: false }));
+  const printLabel = monthNames[Number(monthKey.split("-")[1]) - 1];
+  const printYear = monthKey.split("-")[0];
   const imageStyle = state.printImage ? `style="background-image:url('${state.printImage}')"` : "";
   root.innerHTML = `
     <div class="print-header">
@@ -793,8 +802,7 @@ function renderPrintPage() {
       </div>
     </div>
     <div class="print-hero">
-      <div class="print-photo photo-left" ${imageStyle}></div>
-      <div class="print-photo photo-right" ${imageStyle}></div>
+      <div class="print-photo" ${imageStyle}></div>
       <div class="print-month">MES<br>${printLabel.toUpperCase()}<br>${printYear}</div>
     </div>
     <table class="print-table" id="printTable">
@@ -1024,6 +1032,46 @@ function exportExcel() {
   URL.revokeObjectURL(url);
 }
 
+function exportBackup() {
+  const backup = {
+    version: STORAGE_KEY,
+    exportedAt: new Date().toISOString(),
+    state
+  };
+  const blob = new Blob([JSON.stringify(backup, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `backup-privilegios-${new Date().toISOString().slice(0, 10)}.json`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+function importBackupFile(file) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const backup = JSON.parse(reader.result);
+      const nextState = backup.state || backup;
+      if (!nextState.people || !nextState.months) {
+        window.alert("Arquivo de backup invalido.");
+        return;
+      }
+      state = {
+        ...structuredClone(initialState),
+        ...nextState,
+        currentUser: state.currentUser
+      };
+      saveState();
+      render();
+      window.alert("Backup importado com sucesso.");
+    } catch (error) {
+      window.alert("Nao foi possivel importar o backup.");
+    }
+  };
+  reader.readAsText(file);
+}
+
 document.querySelectorAll(".nav-button").forEach((button) => {
   button.addEventListener("click", () => {
     document.querySelectorAll(".nav-button").forEach((item) => item.classList.remove("is-active"));
@@ -1034,7 +1082,14 @@ document.querySelectorAll(".nav-button").forEach((button) => {
 });
 
 document.querySelector("#googleLoginBtn").addEventListener("click", signInWithGoogle);
-document.querySelector("#localAdminBtn").addEventListener("click", () => {
+document.querySelector("#localAdminForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const password = document.querySelector("#localAdminPassword").value;
+  if (password !== LOCAL_ADMIN_PASSWORD) {
+    document.querySelector("#authMessage").textContent = "Senha do administrador local incorreta.";
+    return;
+  }
+  document.querySelector("#localAdminPassword").value = "";
   signInAs({ name: "Administrador local", email: "admin@local", role: "admin", provider: "local" });
 });
 document.querySelector("#logoutBtn").addEventListener("click", signOut);
@@ -1045,6 +1100,15 @@ document.querySelector("#printBtn").addEventListener("click", () => {
   setTimeout(() => window.print(), 100);
 });
 document.querySelector("#excelBtn").addEventListener("click", exportExcel);
+document.querySelector("#backupExportBtn").addEventListener("click", exportBackup);
+document.querySelector("#backupImportBtn").addEventListener("click", () => {
+  document.querySelector("#backupImportFile").click();
+});
+document.querySelector("#backupImportFile").addEventListener("change", (event) => {
+  const file = event.target.files[0];
+  if (file) importBackupFile(file);
+  event.target.value = "";
+});
 document.querySelector("#resetBtn").addEventListener("click", () => {
   localStorage.removeItem(STORAGE_KEY);
   state = structuredClone(initialState);
@@ -1147,6 +1211,16 @@ document.querySelector("#printImage").addEventListener("change", (event) => {
     renderPrintPage();
   };
   reader.readAsDataURL(file);
+});
+
+document.querySelector("#printMonthSelect").addEventListener("change", (event) => {
+  state.selectedMonth = event.target.value;
+  if (!state.months[state.selectedMonth]) {
+    generateMonth(state.selectedMonth);
+    return;
+  }
+  saveState();
+  render();
 });
 
 document.querySelector("#editForm").addEventListener("submit", (event) => {

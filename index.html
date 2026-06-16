@@ -13,7 +13,12 @@
         <h1>Sistema de Privilegios Mecanicos</h1>
         <p>Entre com sua conta Google para acessar a programacao.</p>
         <button class="google-button" id="googleLoginBtn" type="button">Entrar com Google</button>
-        <button class="text-button" id="localAdminBtn" type="button">Acesso administrador local</button>
+        <form id="localAdminForm" class="local-admin-form">
+          <label>Senha do administrador local
+            <input id="localAdminPassword" type="password" autocomplete="current-password" placeholder="Senha">
+          </label>
+          <button class="text-button" id="localAdminBtn" type="submit">Acesso administrador local</button>
+        </form>
         <p id="authMessage" class="auth-message"></p>
       </div>
     </section>
@@ -49,6 +54,9 @@
           <button class="icon-button" id="generateBtn" title="Gerar escala" data-admin-only="true">Gerar</button>
           <button class="icon-button" id="printBtn" title="Exportar PDF">PDF</button>
           <button class="icon-button" id="excelBtn" title="Exportar Excel">XLS</button>
+          <button class="icon-button" id="backupExportBtn" title="Exportar backup" data-admin-only="true">Backup</button>
+          <button class="icon-button" id="backupImportBtn" title="Importar backup" data-admin-only="true">Importar</button>
+          <input id="backupImportFile" type="file" accept="application/json,.json" hidden>
           <button class="icon-button" id="logoutBtn" title="Sair">Sair</button>
         </div>
       </header>
@@ -117,8 +125,11 @@
         <section class="panel print-controls">
           <div class="panel-head">
             <h2>Programacao para imprimir</h2>
-            <span class="hint">Imprime o mes selecionado e o mes seguinte na mesma folha.</span>
+            <span class="hint">Imprime somente o mes selecionado.</span>
           </div>
+          <label>Mes para impressao
+            <select id="printMonthSelect"></select>
+          </label>
           <label>Imagem da Sentinela do mes
             <input id="printImage" type="file" accept="image/*">
           </label>
