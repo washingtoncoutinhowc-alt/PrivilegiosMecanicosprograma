@@ -38,6 +38,7 @@
         <button class="nav-button" data-view="people" data-admin-only="true">Irmaos</button>
         <button class="nav-button" data-view="absences" data-admin-only="true">Ausencias</button>
         <button class="nav-button" data-view="important" data-admin-only="true">Datas</button>
+        <button class="nav-button" data-view="notifications" data-admin-only="true">Notificacoes</button>
         <button class="nav-button" data-view="history" data-admin-only="true">Historico</button>
         <button class="nav-button" data-view="admin" data-admin-only="true">Administracao</button>
       </nav>
@@ -148,6 +149,9 @@
               <label>Nome
                 <input id="personName" required placeholder="Nome do irmao">
               </label>
+              <label>E-mail
+                <input id="personEmail" type="email" placeholder="email@gmail.com">
+              </label>
               <label>Categoria
                 <select id="personCategory">
                   <option>Anfitriao</option>
@@ -230,6 +234,23 @@
               <table id="importantTable"></table>
             </div>
           </div>
+        </section>
+      </section>
+
+      <section id="notifications" class="view">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Notificacoes</h2>
+            <span class="hint">Gere mensagens por e-mail para os irmaos designados no mes.</span>
+          </div>
+          <div class="notification-actions">
+            <label>Mes dos avisos
+              <select id="notificationMonthSelect"></select>
+            </label>
+            <button class="primary" id="generateNotificationsBtn" type="button">Gerar avisos do mes</button>
+            <button class="text-button" id="copyNotificationsBtn" type="button">Copiar tudo</button>
+          </div>
+          <div id="notificationsList" class="notifications-list"></div>
         </section>
       </section>
 

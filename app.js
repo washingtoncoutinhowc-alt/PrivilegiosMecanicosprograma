@@ -109,6 +109,7 @@ const initialState = {
     }
   ],
   currentUser: null,
+  notificationMonth: "2026-07",
   months: {},
   history: [],
   manualChanges: [],
@@ -123,8 +124,10 @@ function loadState() {
   loaded.importantDates = loaded.importantDates || [];
   loaded.authUsers = loaded.authUsers || initialState.authUsers;
   loaded.currentUser = loaded.currentUser || null;
+  loaded.notificationMonth = loaded.notificationMonth || loaded.selectedMonth || initialState.notificationMonth;
   loaded.months = loaded.months || {};
   loaded.absences = loaded.absences || [];
+  loaded.people = (loaded.people || []).map((person) => ({ email: "", ...person }));
   return loaded;
 }
 
@@ -573,12 +576,84 @@ function allMeetings(monthKey = state.selectedMonth) {
   return month ? month.weeks.flatMap((week) => week.meetings.map((meeting) => ({ ...meeting, week: week.number }))) : [];
 }
 
+function selectedNotificationMonth() {
+  return state.notificationMonth || state.selectedMonth;
+}
+
 function printMonthKeys() {
   return [state.selectedMonth];
 }
 
 function pick(meeting, role) {
   return meeting.assignments.find((item) => item.role === role)?.name || "";
+}
+
+function personByName(name) {
+  return state.people.find((person) => normalizeName(person.name) === normalizeName(name)) || null;
+}
+
+function normalizeName(name) {
+  return (name || "").toLocaleLowerCase("pt-BR").replace(/\s+/g, " ").trim();
+}
+
+function copyToClipboard(text) {
+  if (navigator.clipboard) {
+    return navigator.clipboard.writeText(text);
+  }
+  const area = document.createElement("textarea");
+  area.value = text;
+  area.setAttribute("readonly", "");
+  area.style.position = "fixed";
+  area.style.left = "-9999px";
+  document.body.appendChild(area);
+  area.select();
+  document.execCommand("copy");
+  document.body.removeChild(area);
+  return Promise.resolve();
+}
+
+function assignmentsForNotifications(monthKey = state.selectedMonth) {
+  return allMeetings(monthKey)
+    .filter((meeting) => !meeting.noProgramming)
+    .flatMap((meeting) => meeting.assignments.map((assignment) => ({
+      date: meeting.date,
+      day: meeting.label,
+      week: meeting.week,
+      role: assignment.role,
+      position: assignment.position,
+      name: assignment.name,
+      person: personByName(assignment.name)
+    })));
+}
+
+function groupedNotifications(monthKey = state.selectedMonth) {
+  const groups = new Map();
+  assignmentsForNotifications(monthKey).forEach((item) => {
+    const key = normalizeName(item.name);
+    if (!groups.has(key)) {
+      groups.set(key, {
+        name: item.name,
+        email: item.person?.email || "",
+        assignments: []
+      });
+    }
+    groups.get(key).assignments.push(item);
+  });
+  return [...groups.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+function notificationMessage(group, monthKey = state.selectedMonth) {
+  const lines = group.assignments.map((item) => (
+    `- ${formatDate(item.date)} (${item.day}): ${item.role}${item.position && item.position !== item.role ? ` - ${item.position}` : ""}`
+  ));
+  return [
+    `Ola, ${group.name}.`,
+    "",
+    `Segue sua(s) designacao(oes) de ${monthLabel(monthKey)}:`,
+    ...lines,
+    "",
+    "Obrigado."
+  ].join("\n");
 }
 
 function render() {
@@ -588,12 +663,14 @@ function render() {
   renderAlerts();
   renderMonthPicker();
   renderPrintMonthSelect();
+  renderNotificationMonthSelect();
   renderMonthWeeks();
   renderScheduleTable();
   renderPrintPage();
   renderPeople();
   renderAbsences();
   renderImportantDates();
+  renderNotifications();
   renderHistory();
   renderAuthorizedUsers();
   renderAdmin();
@@ -710,6 +787,15 @@ function renderPrintMonthSelect() {
   if (!select) return;
   select.innerHTML = availableMonthKeys().map((monthKey) => (
     `<option value="${monthKey}" ${monthKey === state.selectedMonth ? "selected" : ""}>${monthLabel(monthKey)}</option>`
+  )).join("");
+}
+
+function renderNotificationMonthSelect() {
+  const select = document.querySelector("#notificationMonthSelect");
+  if (!select) return;
+  const selected = selectedNotificationMonth();
+  select.innerHTML = availableMonthKeys().map((monthKey) => (
+    `<option value="${monthKey}" ${monthKey === selected ? "selected" : ""}>${monthLabel(monthKey)}</option>`
   )).join("");
 }
 
@@ -872,13 +958,14 @@ function renderPeople() {
       <td>${person.category}</td>
       <td>${person.order}</td>
       <td>${person.name}</td>
+      <td>${person.email || ""}</td>
       <td>${person.note || ""}</td>
       <td><button class="text-button" data-toggle="${person.id}">${person.active ? "Ativo" : "Inativo"}</button></td>
       <td><button class="text-button danger" data-remove-person="${person.id}">Remover</button></td>
     </tr>`);
 
   document.querySelector("#peopleTable").innerHTML = `<thead><tr>
-    <th>Categoria</th><th>Ordem</th><th>Nome</th><th>Observacao</th><th>Status</th><th></th>
+    <th>Categoria</th><th>Ordem</th><th>Nome</th><th>E-mail</th><th>Observacao</th><th>Status</th><th></th>
   </tr></thead><tbody>${rows.join("")}</tbody>`;
 
   document.querySelectorAll("[data-toggle]").forEach((button) => {
@@ -939,6 +1026,46 @@ function renderHistory() {
   document.querySelector("#historyTable").innerHTML = `<thead><tr>
     <th>Data</th><th>Semana</th><th>Privilegio</th><th>Posicao</th><th>Nome</th><th>Origem</th><th>Observacao</th>
   </tr></thead><tbody>${rows.join("") || `<tr><td colspan="7">Nenhum historico ainda.</td></tr>`}</tbody>`;
+}
+
+function renderNotifications() {
+  const root = document.querySelector("#notificationsList");
+  if (!root) return;
+  const monthKey = selectedNotificationMonth();
+  const groups = groupedNotifications(monthKey);
+  if (!groups.length) {
+    root.innerHTML = `<p class="hint">Nenhuma designacao encontrada para ${monthLabel(monthKey)}. Clique em Gerar avisos do mes.</p>`;
+    return;
+  }
+
+  root.innerHTML = groups.map((group) => {
+    const message = notificationMessage(group, monthKey);
+    const mailto = group.email
+      ? `mailto:${encodeURIComponent(group.email)}?subject=${encodeURIComponent(`Designacoes - ${monthLabel(monthKey)}`)}&body=${encodeURIComponent(message)}`
+      : "";
+    return `<article class="notification-card">
+      <div class="notification-head">
+        <div>
+          <h3>${group.name}</h3>
+          <p class="${group.email ? "hint" : "danger"}">${group.email || "Sem e-mail cadastrado"}</p>
+        </div>
+        <div class="notification-buttons">
+          ${group.email ? `<a class="text-button" href="${mailto}">Abrir e-mail</a>` : ""}
+          <button class="text-button" data-copy-message="${normalizeName(group.name)}" type="button">Copiar</button>
+        </div>
+      </div>
+      <pre>${message}</pre>
+    </article>`;
+  }).join("");
+
+  document.querySelectorAll("[data-copy-message]").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const group = groupedNotifications(monthKey).find((item) => normalizeName(item.name) === button.dataset.copyMessage);
+      if (!group) return;
+      await copyToClipboard(notificationMessage(group, monthKey));
+      button.textContent = "Copiado";
+    });
+  });
 }
 
 function renderAdmin() {
@@ -1109,6 +1236,32 @@ document.querySelector("#backupImportFile").addEventListener("change", (event) =
   if (file) importBackupFile(file);
   event.target.value = "";
 });
+document.querySelector("#notificationMonthSelect").addEventListener("change", (event) => {
+  state.notificationMonth = event.target.value;
+  saveState();
+  renderNotifications();
+});
+document.querySelector("#generateNotificationsBtn").addEventListener("click", () => {
+  const monthKey = selectedNotificationMonth();
+  if (!state.months[monthKey]) {
+    generateMonth(monthKey);
+    return;
+  }
+  renderNotifications();
+});
+document.querySelector("#copyNotificationsBtn").addEventListener("click", async () => {
+  const monthKey = selectedNotificationMonth();
+  const messages = groupedNotifications(monthKey).map((group) => notificationMessage(group, monthKey));
+  if (!messages.length) {
+    window.alert("Nenhuma notificacao para copiar neste mes.");
+    return;
+  }
+  await copyToClipboard(messages.join("\n\n---\n\n"));
+  document.querySelector("#copyNotificationsBtn").textContent = "Copiado";
+  setTimeout(() => {
+    document.querySelector("#copyNotificationsBtn").textContent = "Copiar tudo";
+  }, 1500);
+});
 document.querySelector("#resetBtn").addEventListener("click", () => {
   localStorage.removeItem(STORAGE_KEY);
   state = structuredClone(initialState);
@@ -1133,6 +1286,7 @@ document.querySelector("#personForm").addEventListener("submit", (event) => {
     category,
     order: nextOrder,
     name,
+    email: normalizeEmail(document.querySelector("#personEmail").value),
     note: document.querySelector("#personNote").value.trim(),
     active: true,
     createdAt: new Date().toISOString()
