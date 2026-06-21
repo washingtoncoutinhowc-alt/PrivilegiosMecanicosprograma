@@ -361,6 +361,35 @@
       </form>
     </dialog>
 
+    <dialog id="personEditDialog">
+      <form method="dialog" id="personEditForm" class="form">
+        <h2>Editar irmao</h2>
+        <input type="hidden" id="personEditId">
+        <label>Nome
+          <input id="personEditName" required>
+        </label>
+        <label>E-mail
+          <input id="personEditEmail" type="email" placeholder="email@gmail.com">
+        </label>
+        <label>Categoria
+          <select id="personEditCategory">
+            <option>Anfitriao</option>
+            <option>Coanfitriao</option>
+            <option>Anciao Indicador</option>
+            <option>Servo/Publicador Indicador</option>
+            <option>Microfone Volante</option>
+          </select>
+        </label>
+        <label>Observacao
+          <input id="personEditNote" placeholder="Opcional">
+        </label>
+        <div class="dialog-actions">
+          <button value="cancel" class="text-button" type="button" id="cancelPersonEdit">Cancelar</button>
+          <button class="primary" value="default">Salvar</button>
+        </div>
+      </form>
+    </dialog>
+
     <script src="./supabase-config.js"></script>
     <script src="./app.js"></script>
   </body>

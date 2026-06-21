@@ -1155,7 +1155,10 @@ function renderPeople() {
       <td>${person.email || ""}</td>
       <td>${person.note || ""}</td>
       <td><button class="text-button" data-toggle="${person.id}">${person.active ? "Ativo" : "Inativo"}</button></td>
-      <td><button class="text-button danger" data-remove-person="${person.id}">Remover</button></td>
+      <td>
+        <button class="text-button" data-edit-person="${person.id}">Editar</button>
+        <button class="text-button danger" data-remove-person="${person.id}">Remover</button>
+      </td>
     </tr>`);
 
   document.querySelector("#peopleTable").innerHTML = `<thead><tr>
@@ -1169,6 +1172,10 @@ function renderPeople() {
       saveState();
       render();
     });
+  });
+
+  document.querySelectorAll("[data-edit-person]").forEach((button) => {
+    button.addEventListener("click", () => openPersonEdit(button.dataset.editPerson));
   });
 
   document.querySelectorAll("[data-remove-person]").forEach((button) => {
@@ -1342,6 +1349,17 @@ function openEdit(value) {
   document.querySelector("#editDialog").showModal();
 }
 
+function openPersonEdit(id) {
+  const person = state.people.find((item) => item.id === id);
+  if (!person) return;
+  document.querySelector("#personEditId").value = person.id;
+  document.querySelector("#personEditName").value = person.name;
+  document.querySelector("#personEditEmail").value = person.email || "";
+  document.querySelector("#personEditCategory").value = person.category;
+  document.querySelector("#personEditNote").value = person.note || "";
+  document.querySelector("#personEditDialog").showModal();
+}
+
 function exportExcel() {
   const table = document.querySelector("#printTable") || document.querySelector("#scheduleTable");
   const blob = new Blob([`<html><meta charset="utf-8">${table.outerHTML}</html>`], { type: "application/vnd.ms-excel" });
@@ -1501,6 +1519,36 @@ document.querySelector("#personForm").addEventListener("submit", (event) => {
   render();
 });
 
+document.querySelector("#personEditForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  const id = document.querySelector("#personEditId").value;
+  const person = state.people.find((item) => item.id === id);
+  if (!person) return;
+
+  const name = document.querySelector("#personEditName").value.trim();
+  const normalizedName = normalizeName(name);
+  const alreadyExists = state.people.some((item) => (
+    item.id !== id && normalizeName(item.name) === normalizedName
+  ));
+  if (alreadyExists) {
+    window.alert("Este nome ja existe no cadastro.");
+    return;
+  }
+
+  const previousCategory = person.category;
+  person.name = name;
+  person.email = normalizeEmail(document.querySelector("#personEditEmail").value);
+  person.category = document.querySelector("#personEditCategory").value;
+  person.note = document.querySelector("#personEditNote").value.trim();
+  if (person.category !== previousCategory) {
+    person.order = byCategory(person.category).length + 1;
+  }
+
+  saveState();
+  document.querySelector("#personEditDialog").close();
+  render();
+});
+
 document.querySelector("#userForm").addEventListener("submit", (event) => {
   event.preventDefault();
   const name = document.querySelector("#userName").value.trim();
@@ -1624,6 +1672,10 @@ document.querySelector("#editForm").addEventListener("submit", (event) => {
 
 document.querySelector("#cancelEdit").addEventListener("click", () => {
   document.querySelector("#editDialog").close();
+});
+
+document.querySelector("#cancelPersonEdit").addEventListener("click", () => {
+  document.querySelector("#personEditDialog").close();
 });
 
 async function boot() {
