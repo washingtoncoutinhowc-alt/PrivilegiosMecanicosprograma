@@ -695,6 +695,23 @@ function setNotificationSendStatus(message, isError = false) {
   root.classList.toggle("danger", isError);
 }
 
+async function functionErrorMessage(error) {
+  if (error?.context) {
+    try {
+      const payload = await error.context.clone().json();
+      if (payload?.error) return payload.error;
+    } catch (jsonError) {
+      try {
+        const text = await error.context.clone().text();
+        if (text) return text;
+      } catch (textError) {
+        // Usa a mensagem padrao abaixo.
+      }
+    }
+  }
+  return error?.message || "Erro desconhecido.";
+}
+
 async function sendAutomaticNotifications() {
   const monthKey = selectedNotificationMonth();
   if (!state.months[monthKey]) {
@@ -720,7 +737,15 @@ async function sendAutomaticNotifications() {
 
   try {
     const client = await getSupabaseClient();
+    const session = await client.auth.getSession();
+    const accessToken = session.data?.session?.access_token;
+    if (!accessToken) {
+      throw new Error("Entre com sua conta Google de administrador antes de enviar.");
+    }
     const { data, error } = await client.functions.invoke("send-notifications", {
+      headers: {
+        Authorization: `Bearer ${accessToken}`
+      },
       body: {
         monthKey,
         monthLabel: monthLabel(monthKey),
@@ -735,7 +760,8 @@ async function sendAutomaticNotifications() {
       window.alert(`Alguns e-mails nao foram enviados:\n${data.errors.map((item) => `${item.email}: ${item.error}`).join("\n")}`);
     }
   } catch (error) {
-    setNotificationSendStatus("Nao foi possivel enviar automaticamente. Verifique a funcao do Supabase e a chave do e-mail.", true);
+    const detail = await functionErrorMessage(error);
+    setNotificationSendStatus(`Nao foi possivel enviar automaticamente: ${detail}`, true);
   } finally {
     button.disabled = false;
     button.textContent = "Enviar por e-mail";
