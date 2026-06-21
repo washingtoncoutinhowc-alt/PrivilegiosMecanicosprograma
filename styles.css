@@ -381,6 +381,39 @@ h2 {
   margin: 8px 0;
 }
 
+.visualization-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.visualization-controls label {
+  min-width: min(320px, 100%);
+}
+
+.privilege-results {
+  display: grid;
+  gap: 10px;
+}
+
+.privilege-result {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.8fr) minmax(120px, 0.7fr) 1fr;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.privilege-result small {
+  grid-column: 1 / -1;
+  color: var(--accent-2);
+  font-weight: 700;
+}
+
 .table-wrap {
   overflow: auto;
   border: 1px solid var(--line);
@@ -490,6 +523,13 @@ pre {
 
 .notification-actions label {
   min-width: 220px;
+}
+
+.send-status {
+  min-height: 20px;
+  margin: -4px 0 14px;
+  color: var(--accent);
+  font-weight: 700;
 }
 
 .notifications-list {
@@ -730,7 +770,8 @@ dialog::backdrop {
   .summary-grid,
   .weekly-cards,
   .week-meetings,
-  .people-layout {
+  .people-layout,
+  .privilege-result {
     grid-template-columns: 1fr;
   }
 }
@@ -759,6 +800,7 @@ dialog::backdrop {
   .print-controls,
   #dashboard,
   #schedule,
+  #visualization,
   #people,
   #absences,
   #important,
