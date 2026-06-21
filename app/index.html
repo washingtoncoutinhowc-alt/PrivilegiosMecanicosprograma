@@ -34,7 +34,8 @@
       <nav aria-label="Navegacao principal">
         <button class="nav-button is-active" data-view="dashboard" data-admin-only="true">Painel</button>
         <button class="nav-button" data-view="schedule" data-admin-only="true">Escala</button>
-        <button class="nav-button" data-view="print">Impressao</button>
+        <button class="nav-button" data-view="visualization">Visualizacao</button>
+        <button class="nav-button" data-view="print">Quadro de anuncio</button>
         <button class="nav-button" data-view="people" data-admin-only="true">Irmaos</button>
         <button class="nav-button" data-view="absences" data-admin-only="true">Ausencias</button>
         <button class="nav-button" data-view="important" data-admin-only="true">Datas</button>
@@ -53,7 +54,7 @@
         <div class="actions">
           <span id="userBadge" class="user-badge"></span>
           <button class="icon-button" id="generateBtn" title="Gerar escala" data-admin-only="true">Gerar</button>
-          <button class="icon-button" id="printBtn" title="Exportar PDF">PDF</button>
+          <button class="icon-button" id="printBtn" title="Exportar quadro em PDF">PDF</button>
           <button class="icon-button" id="excelBtn" title="Exportar Excel">XLS</button>
           <button class="icon-button" id="backupExportBtn" title="Exportar backup" data-admin-only="true">Backup</button>
           <button class="icon-button" id="backupImportBtn" title="Importar backup" data-admin-only="true">Importar</button>
@@ -122,13 +123,43 @@
         </section>
       </section>
 
+      <section id="visualization" class="view">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Visualizacao do mes</h2>
+            <span class="hint">Escolha o mes para consultar a programacao.</span>
+          </div>
+          <div class="visualization-controls">
+            <label>Mes para visualizar
+              <select id="visualizationMonthSelect"></select>
+            </label>
+          </div>
+          <div class="table-wrap">
+            <table id="visualizationMonthTable"></table>
+          </div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Visualizacao de privilegios</h2>
+            <span class="hint">Digite o nome para ver somente as datas daquele irmao.</span>
+          </div>
+          <div class="visualization-controls">
+            <label>Nome do irmao
+              <input id="privilegeSearchInput" placeholder="Exemplo: John">
+            </label>
+          </div>
+          <div id="privilegeResults" class="privilege-results"></div>
+        </section>
+      </section>
+
       <section id="print" class="view">
         <section class="panel print-controls">
           <div class="panel-head">
-            <h2>Programacao para imprimir</h2>
-            <span class="hint">Imprime somente o mes selecionado.</span>
+            <h2>Quadro de anuncio</h2>
+            <span class="hint">Mostra somente o mes selecionado.</span>
           </div>
-          <label>Mes para impressao
+          <label>Mes do quadro
             <select id="printMonthSelect"></select>
           </label>
           <label>Imagem da Sentinela do mes
@@ -248,8 +279,10 @@
               <select id="notificationMonthSelect"></select>
             </label>
             <button class="primary" id="generateNotificationsBtn" type="button">Gerar avisos do mes</button>
+            <button class="primary" id="sendNotificationsBtn" type="button">Enviar por e-mail</button>
             <button class="text-button" id="copyNotificationsBtn" type="button">Copiar tudo</button>
           </div>
+          <div id="notificationSendStatus" class="send-status"></div>
           <div id="notificationsList" class="notifications-list"></div>
         </section>
       </section>

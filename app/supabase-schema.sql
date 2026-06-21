@@ -10,6 +10,12 @@ create table if not exists public.usuarios_autorizados (
 
 alter table public.usuarios_autorizados enable row level security;
 
+drop policy if exists "usuarios podem ler a propria autorizacao" on public.usuarios_autorizados;
+drop policy if exists "admins podem ler todos os usuarios" on public.usuarios_autorizados;
+drop policy if exists "admins podem cadastrar usuarios" on public.usuarios_autorizados;
+drop policy if exists "admins podem alterar usuarios" on public.usuarios_autorizados;
+drop policy if exists "admins podem remover usuarios" on public.usuarios_autorizados;
+
 create policy "usuarios podem ler a propria autorizacao"
 on public.usuarios_autorizados
 for select
@@ -61,6 +67,36 @@ using (
 create policy "admins podem remover usuarios"
 on public.usuarios_autorizados
 for delete
+to authenticated
+using (
+  exists (
+    select 1
+    from public.usuarios_autorizados ua
+    where lower(ua.email) = lower((auth.jwt() ->> 'email'))
+      and ua.perfil = 'admin'
+      and ua.ativo = true
+  )
+);
+
+create table if not exists public.envios_notificacoes (
+  id uuid primary key default gen_random_uuid(),
+  mes text not null,
+  mes_descricao text not null,
+  enviado_por text not null,
+  total_destinatarios integer not null default 0,
+  total_enviados integer not null default 0,
+  total_erros integer not null default 0,
+  erros jsonb not null default '[]'::jsonb,
+  criado_em timestamptz not null default now()
+);
+
+alter table public.envios_notificacoes enable row level security;
+
+drop policy if exists "admins podem ler envios de notificacoes" on public.envios_notificacoes;
+
+create policy "admins podem ler envios de notificacoes"
+on public.envios_notificacoes
+for select
 to authenticated
 using (
   exists (

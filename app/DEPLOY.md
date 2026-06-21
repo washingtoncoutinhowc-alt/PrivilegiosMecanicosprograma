@@ -20,3 +20,21 @@ Use Supabase, GitHub e Vercel para:
 ## Observacao importante
 
 Na versao atual, o login Google ja esta apontado para Supabase. O proximo ajuste e migrar cadastros, escalas e historico do navegador local para tabelas do Supabase.
+
+## Notificacoes automaticas por e-mail
+
+A funcao `send-notifications` envia os avisos pelo Resend. Para ativar:
+
+1. Crie uma conta no Resend.
+2. Copie a API Key do Resend.
+3. No Supabase, va em Edge Functions e publique a pasta `supabase/functions/send-notifications`.
+4. Configure os secrets da funcao:
+   - `RESEND_API_KEY`: chave do Resend.
+   - `NOTIFICATION_FROM`: remetente aprovado no Resend. Exemplo: `Sistema de Privilegios <avisos@seudominio.com>`.
+   - `SUPABASE_SERVICE_ROLE_KEY`: chave service role do projeto Supabase.
+5. Entre no sistema com uma conta Google cadastrada como `admin`.
+6. Va em `Notificacoes`, escolha o mes e clique em `Enviar por e-mail`.
+
+Enquanto o dominio do remetente nao estiver verificado no Resend, use o remetente de teste permitido pelo Resend.
+
+O passo a passo completo esta em `NOTIFICACOES-AUTOMATICAS.md`.

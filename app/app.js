@@ -109,6 +109,7 @@ const initialState = {
     }
   ],
   currentUser: null,
+  visualizationMonth: "2026-07",
   notificationMonth: "2026-07",
   months: {},
   history: [],
@@ -124,6 +125,7 @@ function loadState() {
   loaded.importantDates = loaded.importantDates || [];
   loaded.authUsers = loaded.authUsers || initialState.authUsers;
   loaded.currentUser = loaded.currentUser || null;
+  loaded.visualizationMonth = loaded.visualizationMonth || loaded.selectedMonth || initialState.visualizationMonth;
   loaded.notificationMonth = loaded.notificationMonth || loaded.selectedMonth || initialState.notificationMonth;
   loaded.months = loaded.months || {};
   loaded.absences = loaded.absences || [];
@@ -141,6 +143,17 @@ function normalizeEmail(email) {
 
 function isSupabaseConfigured() {
   return supabaseConfig.url && supabaseConfig.anonKey;
+}
+
+async function getSupabaseClient() {
+  if (!isSupabaseConfigured()) {
+    throw new Error("Supabase nao configurado.");
+  }
+  if (!supabaseRuntime) {
+    const module = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
+    supabaseRuntime = module.createClient(supabaseConfig.url, supabaseConfig.anonKey);
+  }
+  return supabaseRuntime;
 }
 
 function currentAuthUser() {
@@ -185,10 +198,7 @@ async function signInWithGoogle() {
   }
   try {
     message.textContent = "Abrindo login Google...";
-    if (!supabaseRuntime) {
-      const module = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
-      supabaseRuntime = module.createClient(supabaseConfig.url, supabaseConfig.anonKey);
-    }
+    await getSupabaseClient();
 
     const { error } = await supabaseRuntime.auth.signInWithOAuth({
       provider: "google",
@@ -205,10 +215,7 @@ async function signInWithGoogle() {
 async function loadSupabaseSession() {
   if (!isSupabaseConfigured()) return;
   try {
-    if (!supabaseRuntime) {
-      const module = await import("https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm");
-      supabaseRuntime = module.createClient(supabaseConfig.url, supabaseConfig.anonKey);
-    }
+    await getSupabaseClient();
     const { data } = await supabaseRuntime.auth.getSession();
     const sessionUser = data?.session?.user;
     if (!sessionUser?.email) return;
@@ -580,6 +587,10 @@ function selectedNotificationMonth() {
   return state.notificationMonth || state.selectedMonth;
 }
 
+function selectedVisualizationMonth() {
+  return state.visualizationMonth || state.selectedMonth;
+}
+
 function printMonthKeys() {
   return [state.selectedMonth];
 }
@@ -594,6 +605,10 @@ function personByName(name) {
 
 function normalizeName(name) {
   return (name || "").toLocaleLowerCase("pt-BR").replace(/\s+/g, " ").trim();
+}
+
+function assignmentLabel(item) {
+  return `${item.role}${item.position && item.position !== item.role ? ` - ${item.position}` : ""}`;
 }
 
 function copyToClipboard(text) {
@@ -644,7 +659,7 @@ function groupedNotifications(monthKey = state.selectedMonth) {
 
 function notificationMessage(group, monthKey = state.selectedMonth) {
   const lines = group.assignments.map((item) => (
-    `- ${formatDate(item.date)} (${item.day}): ${item.role}${item.position && item.position !== item.role ? ` - ${item.position}` : ""}`
+    `- ${formatDate(item.date)} (${item.day}): ${assignmentLabel(item)}`
   ));
   return [
     `Ola, ${group.name}.`,
@@ -656,6 +671,77 @@ function notificationMessage(group, monthKey = state.selectedMonth) {
   ].join("\n");
 }
 
+function notificationPayload(monthKey = selectedNotificationMonth()) {
+  return groupedNotifications(monthKey)
+    .filter((group) => group.email)
+    .map((group) => ({
+      name: group.name,
+      email: group.email,
+      subject: `Designacoes - ${monthLabel(monthKey)}`,
+      message: notificationMessage(group, monthKey),
+      assignments: group.assignments.map((item) => ({
+        date: item.date,
+        day: item.day,
+        role: item.role,
+        position: item.position
+      }))
+    }));
+}
+
+function setNotificationSendStatus(message, isError = false) {
+  const root = document.querySelector("#notificationSendStatus");
+  if (!root) return;
+  root.textContent = message;
+  root.classList.toggle("danger", isError);
+}
+
+async function sendAutomaticNotifications() {
+  const monthKey = selectedNotificationMonth();
+  if (!state.months[monthKey]) {
+    generateMonth(monthKey, false);
+    renderNotifications();
+  }
+  const recipients = notificationPayload(monthKey);
+  if (!recipients.length) {
+    window.alert("Nenhum irmao com e-mail cadastrado neste mes.");
+    return;
+  }
+  if (!isSupabaseConfigured()) {
+    window.alert("Configure o Supabase antes de enviar notificacoes automaticas.");
+    return;
+  }
+  const confirmed = window.confirm(`Enviar ${recipients.length} e-mail(s) de ${monthLabel(monthKey)} agora?`);
+  if (!confirmed) return;
+
+  const button = document.querySelector("#sendNotificationsBtn");
+  button.disabled = true;
+  button.textContent = "Enviando...";
+  setNotificationSendStatus("Enviando e-mails...");
+
+  try {
+    const client = await getSupabaseClient();
+    const { data, error } = await client.functions.invoke("send-notifications", {
+      body: {
+        monthKey,
+        monthLabel: monthLabel(monthKey),
+        recipients
+      }
+    });
+    if (error) throw error;
+    const sent = data?.sent || 0;
+    const failed = data?.failed || 0;
+    setNotificationSendStatus(`Envio concluido: ${sent} enviado(s), ${failed} com erro.`);
+    if (failed && data?.errors?.length) {
+      window.alert(`Alguns e-mails nao foram enviados:\n${data.errors.map((item) => `${item.email}: ${item.error}`).join("\n")}`);
+    }
+  } catch (error) {
+    setNotificationSendStatus("Nao foi possivel enviar automaticamente. Verifique a funcao do Supabase e a chave do e-mail.", true);
+  } finally {
+    button.disabled = false;
+    button.textContent = "Enviar por e-mail";
+  }
+}
+
 function render() {
   renderAuth();
   renderStatus();
@@ -663,9 +749,11 @@ function render() {
   renderAlerts();
   renderMonthPicker();
   renderPrintMonthSelect();
+  renderVisualizationMonthSelect();
   renderNotificationMonthSelect();
   renderMonthWeeks();
   renderScheduleTable();
+  renderVisualization();
   renderPrintPage();
   renderPeople();
   renderAbsences();
@@ -704,8 +792,9 @@ function applyAccessControl() {
   if (!admin) {
     document.querySelectorAll(".nav-button").forEach((item) => item.classList.remove("is-active"));
     document.querySelectorAll(".view").forEach((item) => item.classList.remove("is-active"));
-    document.querySelector('[data-view="print"]').classList.add("is-active");
-    document.querySelector("#print").classList.add("is-active");
+    document.querySelector('[data-view="visualization"]').classList.add("is-active");
+    document.querySelector("#visualization").classList.add("is-active");
+    updatePageTitle();
   }
 }
 
@@ -713,8 +802,26 @@ function renderStatus() {
   const month = selectedMonth();
   document.querySelector("#statusText").textContent = month ? month.status : "Aguardando geracao";
   document.querySelector("#selectedMonthText").textContent = monthLabel(state.selectedMonth);
+  updatePageTitle();
+}
+
+function updatePageTitle() {
   const title = document.querySelector("#pageTitle");
-  if (title) title.textContent = `Escala de ${monthLabel(state.selectedMonth)}`;
+  if (!title) return;
+  const activeView = document.querySelector(".view.is-active")?.id || "dashboard";
+  const titles = {
+    dashboard: `Escala de ${monthLabel(state.selectedMonth)}`,
+    schedule: `Escala de ${monthLabel(state.selectedMonth)}`,
+    visualization: `Visualizacao de ${monthLabel(selectedVisualizationMonth())}`,
+    print: `Quadro de anuncio de ${monthLabel(state.selectedMonth)}`,
+    people: "Cadastro de irmaos",
+    absences: "Ausencias",
+    important: "Datas importantes",
+    notifications: `Notificacoes de ${monthLabel(selectedNotificationMonth())}`,
+    history: "Historico de designacoes",
+    admin: "Administracao"
+  };
+  title.textContent = titles[activeView] || "Sistema de Privilegios Mecanicos";
 }
 
 function renderWeeklyCards() {
@@ -790,6 +897,15 @@ function renderPrintMonthSelect() {
   )).join("");
 }
 
+function renderVisualizationMonthSelect() {
+  const select = document.querySelector("#visualizationMonthSelect");
+  if (!select) return;
+  const selected = selectedVisualizationMonth();
+  select.innerHTML = availableMonthKeys().map((monthKey) => (
+    `<option value="${monthKey}" ${monthKey === selected ? "selected" : ""}>${monthLabel(monthKey)}</option>`
+  )).join("");
+}
+
 function renderNotificationMonthSelect() {
   const select = document.querySelector("#notificationMonthSelect");
   if (!select) return;
@@ -836,6 +952,84 @@ function renderMonthWeeks() {
   document.querySelectorAll("[data-edit]").forEach((button) => {
     button.addEventListener("click", () => openEdit(button.dataset.edit));
   });
+}
+
+function renderVisualization() {
+  renderVisualizationMonthTable();
+  renderPrivilegeSearchResults();
+}
+
+function renderVisualizationMonthTable() {
+  const table = document.querySelector("#visualizationMonthTable");
+  if (!table) return;
+  const monthKey = selectedVisualizationMonth();
+  if (!state.months[monthKey]) generateMonth(monthKey, false);
+  const meetings = allMeetings(monthKey);
+  if (!meetings.length) {
+    table.innerHTML = `<tbody><tr><td>Nenhuma programacao encontrada para ${monthLabel(monthKey)}.</td></tr></tbody>`;
+    return;
+  }
+  table.innerHTML = `<thead><tr>
+    <th>Data</th><th>Dia</th><th>Anfitriao</th><th>Coanfitriao</th>
+    <th>Indicadores</th><th>Microfones</th><th>Observacao</th>
+  </tr></thead><tbody>${meetings.map((meeting) => {
+    const indicators = [
+      pick(meeting, "Indicador Entrada"),
+      pick(meeting, "Indicador Auditorio"),
+      pick(meeting, "Indicador Estacionamento")
+    ].filter(Boolean).join(", ");
+    const microphones = [
+      pick(meeting, "Volante 1"),
+      pick(meeting, "Volante 2")
+    ].filter(Boolean).join(", ");
+    return `<tr>
+      <td>${formatDate(meeting.date)}</td>
+      <td>${meeting.label}</td>
+      <td>${meeting.noProgramming ? "Sem programacao" : pick(meeting, "Anfitriao")}</td>
+      <td>${meeting.noProgramming ? "-" : pick(meeting, "Coanfitriao")}</td>
+      <td>${meeting.noProgramming ? "-" : indicators}</td>
+      <td>${meeting.noProgramming ? "-" : microphones}</td>
+      <td>${meeting.important ? importantLabel(meeting.important.type) : ""}</td>
+    </tr>`;
+  }).join("")}</tbody>`;
+}
+
+function renderPrivilegeSearchResults() {
+  const root = document.querySelector("#privilegeResults");
+  const input = document.querySelector("#privilegeSearchInput");
+  if (!root || !input) return;
+  const query = normalizeName(input.value);
+  const monthKey = selectedVisualizationMonth();
+  if (!query) {
+    root.innerHTML = `<p class="hint">Digite um nome para consultar os privilegios em ${monthLabel(monthKey)}.</p>`;
+    return;
+  }
+  if (!state.months[monthKey]) generateMonth(monthKey, false);
+  const results = allMeetings(monthKey)
+    .filter((meeting) => !meeting.noProgramming)
+    .flatMap((meeting) => meeting.assignments
+      .filter((item) => normalizeName(item.name).includes(query))
+      .map((item) => ({
+        date: meeting.date,
+        day: meeting.label,
+        name: item.name,
+        role: assignmentLabel(item),
+        important: meeting.important
+      })));
+
+  if (!results.length) {
+    root.innerHTML = `<p class="hint">Nenhum privilegio encontrado para "${input.value}" em ${monthLabel(monthKey)}.</p>`;
+    return;
+  }
+
+  root.innerHTML = results.map((item) => `
+    <article class="privilege-result">
+      <strong>${formatDate(item.date)} - ${item.day}</strong>
+      <span>${item.name}</span>
+      <span>${item.role}</span>
+      ${item.important ? `<small>${importantLabel(item.important.type)}</small>` : ""}
+    </article>
+  `).join("");
 }
 
 function renderScheduleTable() {
@@ -1205,6 +1399,7 @@ document.querySelectorAll(".nav-button").forEach((button) => {
     document.querySelectorAll(".view").forEach((item) => item.classList.remove("is-active"));
     button.classList.add("is-active");
     document.querySelector(`#${button.dataset.view}`).classList.add("is-active");
+    updatePageTitle();
   });
 });
 
@@ -1236,10 +1431,19 @@ document.querySelector("#backupImportFile").addEventListener("change", (event) =
   if (file) importBackupFile(file);
   event.target.value = "";
 });
+document.querySelector("#visualizationMonthSelect").addEventListener("change", (event) => {
+  state.visualizationMonth = event.target.value;
+  saveState();
+  renderVisualization();
+  updatePageTitle();
+});
+document.querySelector("#privilegeSearchInput").addEventListener("input", renderPrivilegeSearchResults);
 document.querySelector("#notificationMonthSelect").addEventListener("change", (event) => {
   state.notificationMonth = event.target.value;
   saveState();
+  setNotificationSendStatus("");
   renderNotifications();
+  updatePageTitle();
 });
 document.querySelector("#generateNotificationsBtn").addEventListener("click", () => {
   const monthKey = selectedNotificationMonth();
@@ -1249,6 +1453,7 @@ document.querySelector("#generateNotificationsBtn").addEventListener("click", ()
   }
   renderNotifications();
 });
+document.querySelector("#sendNotificationsBtn").addEventListener("click", sendAutomaticNotifications);
 document.querySelector("#copyNotificationsBtn").addEventListener("click", async () => {
   const monthKey = selectedNotificationMonth();
   const messages = groupedNotifications(monthKey).map((group) => notificationMessage(group, monthKey));
