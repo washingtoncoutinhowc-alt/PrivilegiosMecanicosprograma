@@ -253,8 +253,12 @@ async function loadSupabaseSession() {
       email,
       provider: "supabase-google"
     };
-    const existsLocal = (state.authUsers || []).some((user) => normalizeEmail(user.email) === email);
-    if (!existsLocal) {
+    const localUser = (state.authUsers || []).find((user) => normalizeEmail(user.email) === email);
+    if (localUser) {
+      localUser.name = state.currentUser.name;
+      localUser.role = authorized.role || "viewer";
+      localUser.active = true;
+    } else {
       state.authUsers.push({
         id: crypto.randomUUID(),
         name: state.currentUser.name,
